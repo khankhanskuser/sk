@@ -1,0 +1,37 @@
+name: Debug OIDC Token
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  print-oidc-token:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Generate GitHub OIDC Token
+        id: id_token
+        run: |
+          echo "Requesting OIDC token..."
+          curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN" "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
+
+      - name: Fetch and Decode Token
+        run: |
+          echo "Getting OIDC Token from GitHub..."
+          export TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"audience":"api://AzureADTokenExchange"}' \
+            https://token.actions.githubusercontent.com | jq -r .value)
+
+          echo "::add-mask::$TOKEN"
+          echo "----- TOKEN PAYLOAD -----"
+          echo "$TOKEN" | cut -d '.' -f2 | base64 -d 2>/dev/null || echo "Decode error"
+
+        env:
+          ACTIONS_ID_TOKEN: ${{ secrets.GITHUB_TOKEN }}
