@@ -1,0 +1,53 @@
+name: Get OIDC Token
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  fetch-oidc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Request GitHub OIDC Token
+        id: get_token
+        run: |
+          echo "Requesting GitHub OIDC token..."
+          RESPONSE=$(curl -s \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"audience":"api://AzureADTokenExchange"}' \
+            https://token.actions.githubusercontent.com)
+
+          echo "Response:"
+          echo "$RESPONSE"
+
+          TOKEN=$(echo "$RESPONSE" | jq -r .value)
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "❌ Token fetch failed."
+            exit 1
+          fi
+
+          echo "::add-mask::$TOKEN"
+          echo "$TOKEN" > token.txt
+
+          echo "Decoded Payload:"
+          echo "$TOKEN" | cut -d '.' -f2 | base64 -d || echo "Failed to decode."
+
+        env:
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ steps.generate_token.outputs.id_token }}
+          ACTIONS_ID_TOKEN: ${{ steps.generate_token.outputs.id_token }}
+
+      - name: Generate ID Token
+        id: generate_token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('api://AzureADTokenExchange');
+            core.setOutput('id_token', token);
